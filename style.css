@@ -36,3 +36,6 @@ button:active{background:linear-gradient(145deg,rgba(35,35,35,.85),rgba(15,15,15
 #clearBtn:hover{background:rgba(160,55,55,.75);}
 #clearBtn:active{background:rgba(90,30,30,.8);}
 .hiddenUI{opacity:0;pointer-events:none;}
+
+#musicBtn:hover  {background:rgba(255,255,255,.25);}
+#musicBtn:active {transform:scale(.94);}
