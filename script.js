@@ -730,7 +730,7 @@ function generateBlackHole(group){
   /* ---------- подготовка материалов ---------- */
   const mat = new THREE.LineBasicMaterial({
     transparent: true,
-    opacity: 0.5,
+    opacity: 0.2,
     blending: THREE.AdditiveBlending,
     vertexColors: true
   });
