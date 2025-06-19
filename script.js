@@ -58,7 +58,7 @@ function init() {
   composer.addPass(bloom);
 
   /* свет */
-  scene.add(new THREE.AmbientLight(0x404040,30));
+  scene.add(new THREE.AmbientLight(0x404040,300));
   const dir = new THREE.DirectionalLight(0xffffff,3.5);
   dir.position.set(5,12,8); scene.add(dir);
 
@@ -516,7 +516,7 @@ function createRingTexture(inner, outer){
 }
 
 /* — узкий полупрозрачный конус джета — */
-function addJet(parent, up=true, h=8000, r=260){
+function addJet(parent, up=true, h=28000, r=60){
   const geo=new THREE.ConeGeometry(r,h,32,1,true);
   geo.translate(0, -h/2, 0);
   const mat=new THREE.MeshBasicMaterial({
@@ -530,74 +530,100 @@ function addJet(parent, up=true, h=8000, r=260){
 }
 
 //////////////////////////////////////////////////////////////
-//  DIMENSION #3 – 4D-Tesseract  (fixed & upgraded)
+//  DIMENSION #3 –  Hyper Orbitals (полностью новый)
 //////////////////////////////////////////////////////////////
 function generateTesseract(group){
-  /* ---------- вершинные данные ---------- */
-  const verts4D = [];
-  for(let i=0;i<16;i++){
-    verts4D.push([
-      (i&1)? 1:-1,
-      (i&2)? 1:-1,
-      (i&4)? 1:-1,
-      (i&8)? 1:-1
-    ]);
-  }
 
-  const edges = [];
-  for(let a=0;a<16;a++) for(let b=a+1;b<16;b++){
-    let diff=0;
-    for(let k=0;k<4;k++) diff += (verts4D[a][k]!==verts4D[b][k]);
-    if(diff===1) edges.push([a,b]);
-  }
+  /* ---------- параметры структуры ---------- */
+  const ORBITS          = 16;      // сколько орбиталей
+  const PTS_PER_ORBIT   = 180;     // плотность линий-ритха
+  const ELECTRONS_PER_O = 30;       // «бегущих точек» на орбиту
 
-  /* ---------- буферная геометрия ---------- */
-  const posAry = new Float32Array(edges.length*2*3);
-  const colAry = new Float32Array(edges.length*2*3);
-  const gCol   = new THREE.Color();
+  const BASE_A          = 200;    // полуось a
+  const RAND_SCALE      = 3500;    // ранд-растяжение
+  const SIZE_ELECTRON   = 78;
+  const GLOW_R          = 1100;
 
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(posAry,3));
-  geo.setAttribute('color',    new THREE.BufferAttribute(colAry,3));
-
-  /* «неоновый» материал (LineBasic + bloom-свечение) */
-  const mat = new THREE.LineBasicMaterial({
-    vertexColors:true,
-    transparent:true,
-    opacity:0.9
+  /* ---------- материалы ---------- */
+  const lineMat = new THREE.LineBasicMaterial({
+     transparent:true, opacity:.3,
+     color:0xffffff, blending:THREE.AdditiveBlending
   });
+  const electronMat = makePointShader();      // уже содержит puls
 
-  const mesh = new THREE.LineSegments(geo, mat);
-  group.add(mesh);
+  /* ---------- массивы всех электронов ---------- */
+  const electronsPos  = [];
+  const electronsSize = [];
+  const electronSprites = [];
+
+  /* ---------- орбити-линии ---------- */
+  for(let o=0;o<ORBITS;o++){
+
+    /* эллипс в собственной плоскости */
+    const a = BASE_A + Math.random()*RAND_SCALE;
+    const b = BASE_A*0.6 + Math.random()*RAND_SCALE*0.6;
+    const rot = new THREE.Quaternion()
+                .setFromEuler(new THREE.Euler(
+                    Math.random()*Math.PI,
+                    Math.random()*Math.PI,
+                    Math.random()*Math.PI));
+
+    const pts = [];
+    for(let i=0;i<=PTS_PER_ORBIT;i++){
+      const t = i/PTS_PER_ORBIT * Math.PI*2;
+      const v = new THREE.Vector3(a*Math.cos(t), 0, b*Math.sin(t))
+                      .applyQuaternion(rot);
+      pts.push(v);
+    }
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    group.add(new THREE.LineLoop(geo, lineMat));
+
+    /* электроны-спрайты на этой орбите */
+    for(let e=0;e<ELECTRONS_PER_O;e++){
+      const phase = Math.random()*Math.PI*2;
+      electronsPos.push({a,b,rot,phase, speed:0.3+Math.random()*0.4});
+      const spr = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: makeGlowTexture('#ffffff','#00205000'),
+        color: new THREE.Color().setHSL(0.75+0.7*Math.random(),1,0.6),
+        transparent:true, blending:THREE.AdditiveBlending,
+        depthWrite:false
+      }));
+      spr.scale.setScalar(SIZE_ELECTRON);
+      group.add(spr);
+      electronSprites.push(spr);
+    }
+  }
+
+  /* ---------- центральный «ядро» ---------- */
+  const nucleus = new THREE.Sprite(new THREE.SpriteMaterial({
+     map: makeGlowTexture('#72ffec','#17003000'),
+     blending:THREE.AdditiveBlending, transparent:true,
+     opacity:.55, depthWrite:false}));
+  nucleus.scale.setScalar(GLOW_R*2);
+  group.add(nucleus);
 
   /* ---------- анимация ---------- */
-  group.userData.anim = (ts)=>{
-    const t = ts*0.0004;
-    const wDist = 4 + Math.sin(t*0.8);          // 3 … 5  (безопасно > |w|)
-    let i=0;
+  group.userData.anim = ()=>{
+    const t = performance.now()*0.001;
 
-    edges.forEach((e,idx)=>{
-      [0,1].forEach((end)=>{
-        const v4   = verts4D[e[end]];
-        const rot  = rotate4D(v4,  t, t*0.6);   // плавное двойное вращение
-        const v3   = project4Dto3D(rot, wDist);
-        posAry.set(v3.toArray(), i*3);
-
-        /* радуга по рёбрам */
-        gCol.setHSL(idx/edges.length, 1.0, 0.58);
-        colAry.set([gCol.r,gCol.g,gCol.b], i*3);
-        i++;
-      });
+    /* движение электронов */
+    electronsPos.forEach((o,i)=>{
+      const θ = (o.phase + t*o.speed) % (Math.PI*2);
+      const v = new THREE.Vector3(
+        o.a*Math.cos(θ),
+        0,
+        o.b*Math.sin(θ)
+      ).applyQuaternion(o.rot);
+      electronSprites[i].position.copy(v);
     });
 
-    geo.attributes.position.needsUpdate = true;
-    geo.attributes.color.needsUpdate    = true;
-
-    mesh.rotation.y += 0.0012;                 // медленное глобальное вращение
+    /* плавное вращение всего облака */
+    group.rotation.y += 0.0006;
+    group.rotation.x += 0.00015;
+    nucleus.material.rotation = t*0.4;
   };
 
-  /* кинематографичный вынос камеры */
-  focusCameraOn(group, 2.2);
+  focusCameraOn(group,3.0);
 }
 
 //////////////////////////////////////////////////////////////
@@ -907,7 +933,7 @@ function generateInfinityWeb(group){
   /*  параметры  */
   const CURVES        = 18;          // количество восьмёрок / Лиссажу
   const PTS_PER_CURVE = 26000;         // точек на кривой
-  const BASE_R        = 17800;        // общий размах
+  const BASE_R        = 27800;        // общий размах
   const AMP_Y         = 9000;         // «волна» по Y
   const SIZE_MIN      = 9, SIZE_MAX = 74;
   const GLOW_R        = 900;
@@ -977,10 +1003,10 @@ function generateInfinityWeb(group){
 
   /* ------------- central glow sprite ------------- */
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-    map: makeGlowTexture('#d172ff','#10002000'),
+    map: makeGlowTexture('#a372ff','#10002000'),
     blending:THREE.AdditiveBlending,
     transparent:true, depthWrite:false, depthTest:false,
-    opacity:0.85
+    opacity:0.95
   }));
   glow.scale.set(GLOW_R*2,GLOW_R*2,1);
   group.add(glow);
