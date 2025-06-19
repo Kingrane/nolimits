@@ -229,132 +229,146 @@ function generateRingOfChaos(targetGroup) {
 }
 
 //////////////////////////////////////////////////////////////
-//  DIMENSION #2 – Stellar Vortex v2 (larger & brighter core)
+//  DIMENSION #2 – Stellar Vortex v4  (ATOM CORE)
 //////////////////////////////////////////////////////////////
 function generateStellarVortex(group){
-  /* =======  параметризуем, чтобы было проще играться  ======= */
-  const ARMS          = 5;          // рукавов
-  const PTS_ARM       = 60000;      // точек на рукав
-  const CORE_PTS      = 2500;      // частиц в ядре-«буле»
-  const SCALE_SPIRAL  = 1600;       // масштаб всей галактики (≈ радиус)
-  const SCALE_CORE    = 450;        // размер ядра
-  const NOISE_SPIRAL  = 110;        // расползание рукавов
-  const NOISE_CORE    = 1800;        // распушение ядра
-  const A = 0.55;                  // r = A·e^(Bθ)
-  const B = 0.19;
+  /* ─────  Глобальные параметры  ───── */
+  const GAL_ARMS   = 5;         // больших рукавов
+  const PTS_ARM    = 60000;
+  const CORE_SPIR  = 5;         // мини-спиралей-“электронов”
+  const CORE_PTS   = 1200;      // точек на каждую мини-спираль
+  const SCALE_GAL  = 1600;
+  const SCALE_CORE = 420;
+  const A = 0.55, B = 0.19;     // r = A·e^(Bθ)
 
-  /* ---------- подготовка буферов ---------- */
-  const TOTAL = ARMS*PTS_ARM + CORE_PTS;
-  const pos   = new Float32Array(TOTAL*3);
-  const col   = new Float32Array(TOTAL*3);
-  const size  = new Float32Array(TOTAL);
+  /* предварительно считаем размер буфера */
+  const TOTAL = GAL_ARMS*PTS_ARM + CORE_SPIR*CORE_PTS;
+  const pos  = new Float32Array(TOTAL*3);
+  const col  = new Float32Array(TOTAL*3);
+  const size = new Float32Array(TOTAL);
 
   const c = new THREE.Color();
   let idx = 0;
 
-  /* ---------- ядро / балдж ---------- */
-  for(let i=0; i<CORE_PTS; i++, idx++){
-    /* случайная точка в вытянутом эллипсоиде */
-    const r = Math.cbrt(Math.random()) * SCALE_CORE;
-    const phi = Math.acos(2*Math.random()-1);
-    const theta = 2*Math.PI*Math.random();
-    const x = r*Math.sin(phi)*Math.cos(theta)*(1.0+Math.random()*0.2);
-    const y = (Math.random()-0.5)*NOISE_CORE*1.3;
-    const z = r*Math.sin(phi)*Math.sin(theta)*(1.0+Math.random()*0.2);
-
-    pos.set([x,y,z], idx*3);
-
-    /* цвет – бело-голубое ядро */
-    c.setRGB(1, 0.94+0.05*Math.random(), 0.98+0.02*Math.random());
-    col.set([c.r,c.g,c.b], idx*3);
-
-    size[idx] = 5 + 15*Math.random();
-  }
-
-  /* ---------- рукава ---------- */
-  for(let arm=0; arm<ARMS; arm++){
+  /* ──────────────────────────────────
+     1.  Внешние рукава
+     ────────────────────────────────── */
+  for(let arm=0; arm<GAL_ARMS; arm++){
     for(let i=0; i<PTS_ARM; i++, idx++){
-      const t  = i / PTS_ARM;                // 0…1 вдоль рукава
-      const θ  = t * Math.PI * 16 + arm*Math.PI;  // 8 оборотов
-      const r  = A * Math.exp(B * θ);
+      const t  = i / PTS_ARM;
+      const θ  = t*Math.PI*16 + arm*Math.PI;   // 8 оборотов
+      const r  = A*Math.exp(B*θ);
 
-      let x = r * Math.cos(θ) * SCALE_SPIRAL;
-      let z = r * Math.sin(θ) * SCALE_SPIRAL;
-      let y = Math.sin(θ*1.8) * 800 * Math.random();
+      let x = r*Math.cos(θ)*SCALE_GAL;
+      let z = r*Math.sin(θ)*SCALE_GAL;
+      let y = Math.sin(θ*1.8)*800*Math.random();
 
-      x += (Math.random()-0.5)*NOISE_SPIRAL;
-      y += (Math.random()-0.5)*NOISE_SPIRAL*0.7;
-      z += (Math.random()-0.5)*NOISE_SPIRAL;
+      /* небольшой шум */
+      x += (Math.random()-0.5)*110;
+      y += (Math.random()-0.5)*80;
+      z += (Math.random()-0.5)*110;
 
       pos.set([x,y,z], idx*3);
 
-      /* плавный переход: центр голубой → края пурпурный */
-      c.setHSL(0.58 + 0.25*t, 1.0, 0.55 + 0.1*t);
-      col.set([c.r, c.g, c.b], idx*3);
+      /* голубой → фиолетовый градиент */
+      c.setHSL(0.58+0.25*t,1,0.55+0.1*t);
+      col.set([c.r,c.g,c.b], idx*3);
 
-      size[idx] = 3.5 + 3.5*Math.random()*(1-t) + 1.5*Math.random();
+      size[idx] = 3.5 + 3.5*Math.random()*(1-t)+1.5*Math.random();
     }
   }
 
-  /* ---------- шейдер ---------- */
+  /* ──────────────────────────────────
+     2.  «Атомное» ядро – 5 мини-спиралей
+     ────────────────────────────────── */
+  for(let s=0; s<CORE_SPIR; s++){
+    const rot = s * (Math.PI*2/CORE_SPIR);          // 0°,72°…
+    for(let i=0;i<CORE_PTS;i++,idx++){
+      const t = i/CORE_PTS;                         // 0..1
+      const θ = t * Math.PI * 6;                    // 3 оборота
+      const r = t * SCALE_CORE;                     // линейное радиальное
+      let x = Math.cos(θ)*r;
+      let z = Math.sin(θ)*r;
+      const y = (Math.random()-0.5)*80;             // лёгкая толщина
+
+      /* поворачиваем спираль вокруг Y */
+      const rx = x*Math.cos(rot) - z*Math.sin(rot);
+      const rz = x*Math.sin(rot) + z*Math.cos(rot);
+
+      pos.set([rx, y, rz], idx*3);
+
+      /* разные цвета: радуга по спиралям */
+      c.setHSL((s/CORE_SPIR)+0.05*Math.sin(t*6), 0.85, 0.65);
+      col.set([c.r,c.g,c.b], idx*3);
+
+      size[idx] = 6 + 9*(1-t)          // ближе к центру крупнее
+                  + 2*Math.random();
+    }
+  }
+
+  /* ──────────────────────────────────
+     3.  Шейдерные материалы
+     ────────────────────────────────── */
   const VERT = `
-    attribute float size;
-    attribute vec3  vcolor;
-    uniform   float time;
-    varying   vec3  vc;
-    varying   float fade;
+    attribute float size; attribute vec3 vcolor;
+    uniform float time; varying vec3 vc;
     void main(){
       vc = vcolor;
       vec4 mv = modelViewMatrix * vec4(position,1.0);
-      /* puls + дистанционное затухание */
-      float puls = 0.85 + 0.15*sin(time*0.4 + position.x*0.001);
-      fade = smoothstep(0.0, 6000.0, -mv.z);
-      gl_PointSize = size * puls * (420.0 / -mv.z);
+      float puls = 0.9 + 0.1*sin(time*0.6 + position.x*0.003);
+      gl_PointSize = size * puls * (420. / -mv.z);
       gl_Position  = projectionMatrix * mv;
     }`;
-
   const FRAG = `
-    precision mediump float;
-    varying vec3  vc;
-    varying float fade;
+    precision mediump float; varying vec3 vc;
     void main(){
-      vec2 p  = gl_PointCoord - 0.5;
-      float d = length(p);
-      float a = smoothstep(0.5,0.0,d) * fade;
-      gl_FragColor = vec4(vc * a, a);
+      vec2 p = gl_PointCoord - 0.5;
+      float a = smoothstep(0.5,0.0,length(p));
+      gl_FragColor = vec4(vc*a, a);
     }`;
 
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(pos,3));
-  g.setAttribute('vcolor',   new THREE.BufferAttribute(col,3));
-  g.setAttribute('size',     new THREE.BufferAttribute(size,1));
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  geo.setAttribute('vcolor',   new THREE.BufferAttribute(col,3));
+  geo.setAttribute('size',     new THREE.BufferAttribute(size,1));
 
-  const m = new THREE.ShaderMaterial({
+  const mat = new THREE.ShaderMaterial({
     uniforms:{time:{value:0}},
     vertexShader:VERT, fragmentShader:FRAG,
     transparent:true, depthWrite:false,
     blending:THREE.AdditiveBlending
   });
 
-  const vortex = new THREE.Points(g, m);
+  const vortex = new THREE.Points(geo, mat);
   group.add(vortex);
 
-  /* ---------- анимация ---------- */
-  group.userData.anim = (dt)=>{
-    m.uniforms.time.value = performance.now()*0.001;
-    group.rotation.y += 0.00035;
-    group.rotation.z += 0.00005* Math.sin(performance.now()*0.0001);
-  };
-
-  /* лёгкий «коронный» туман – Billboard Sprite */
-  const tex = createRadialGradientTexture('#aad4ff','#0000');
+  /* ──────────────────────────────────
+     4.  Корона-glow
+     ────────────────────────────────── */
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-    map:tex, color:0xffffff, blending:THREE.AdditiveBlending, opacity:0.22
+    map:createRadialGradientTexture('#aee5ff','#00000000'),
+    blending:THREE.AdditiveBlending, opacity:0.18,
+    depthWrite:false, depthTest:false
   }));
-  glow.scale.set(SCALE_CORE*6, SCALE_CORE*6, 1);
+  glow.scale.set(SCALE_CORE*7, SCALE_CORE*7, 1);
   group.add(glow);
 
-  focusCameraOn(group, 2.8);
+  /* ──────────────────────────────────
+     5.  Анимация
+     ────────────────────────────────── */
+  group.userData.anim = (dt)=>{
+    const t = performance.now()*0.001;
+    mat.uniforms.time.value = t;
+
+    /* внешняя галактика медленно */
+    group.rotation.y += 0.00035;
+        /* мини-спирали «вращаются навстречу» */
+    vortex.rotation.y += 0;
+    vortex.rotation.z += 0;
+
+  };
+
+  focusCameraOn(group, 2.6);
 }
 
 /* ===== helper: radial texture ===== */
@@ -424,7 +438,11 @@ function resetCamera(){
 
 function onKey(e){
   switch(e.code){
-    case 'KeyH': ui.classList.toggle('hiddenUI');break;
+    case 'KeyH':
+        ui.classList.toggle('hiddenUI');
+        document.getElementById('key-hint').classList.toggle('hiddenUI');
+        break;
+
     case 'KeyF': toggleControls();break;
     case 'Digit1': loadDimension(generateRingOfChaos);break;
     case 'Digit2': loadDimension(generateStellarVortex);break;
@@ -683,166 +701,173 @@ function createMagneticArc(offset){
 }
 
 /* =========================================================
-      DIMENSION #5  –  Black-Hole Singularity
+   DIMENSION #5 – Black-Hole v5 (Relativity Edition)
    ========================================================= */
 function generateBlackHole(group){
 
-  /* ---------- базовые размеры ---------- */
-  const EH_RADIUS  = 400;         // event-horizon
-  const RING_R     = EH_RADIUS*1.05;
-  const DISK_IN    = EH_RADIUS*1.3;
-  const DISK_OUT   = EH_RADIUS*6.0;
-  const DISK_PTS   = 50000;
+/* ─────────  базовые константы  ───────── */
+const EH_R   = 1420;                // event-horizon
+const RING_R = EH_R*1.05;          // photon-ring
+const DISK_IN= EH_R*1.35;
+const DISK_OUT=EH_R*8.0;
+const CURVE  = EH_R*3.0;           // высота «загиба» диска
 
-  /* ======================================================
-        1)  EVENT HORIZON (чёрная сфера)
-     ====================================================== */
-  const horizon = new THREE.Mesh(
-    new THREE.SphereGeometry(EH_RADIUS, 48, 48),
-    new THREE.MeshBasicMaterial({color:0x000000})
-  );
-  group.add(horizon);
+/* ── 1. Event horizon + Fresnel-glow ── */
+const horizonGeo = new THREE.SphereGeometry(EH_R,64,64);
+const horizonMat = new THREE.ShaderMaterial({
+  uniforms:{},
+  vertexShader:`varying vec3 vN; void main(){
+      vN = normalize(normalMatrix * normal);
+      gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.);
+  }`,
+  fragmentShader:`varying vec3 vN;
+      void main(){
+        float f = pow(1.0-abs(vN.z), 3.0);   // Fresnel
+        gl_FragColor = vec4(vec3(f*0.25), 1.0); // тонкое серое свечение
+  }`,
+  blending:THREE.AdditiveBlending, depthWrite:true
+});
+group.add(new THREE.Mesh(horizonGeo,horizonMat));
 
-  /* ======================================================
-        2)  PHOTON RING (сияющее тонкое кольцо)
-     ====================================================== */
-  const ringGeo = new THREE.TorusGeometry(
-      RING_R, EH_RADIUS*0.06, 16, 180);
-  const ringMat = new THREE.MeshBasicMaterial({
-    color:0xffcc66, emissive:0xffaa33,
-    emissiveIntensity:1.8,
-    transparent:true, opacity:0.85,
-    blending:THREE.AdditiveBlending
-  });
-  const ring = new THREE.Mesh(ringGeo, ringMat);
-  ring.rotation.x = Math.PI/2;
-  group.add(ring);
+/* ── 2. Photon ring (tube + shader) ── */
+const ringGeo = new THREE.TubeGeometry(
+  new THREE.CurvePath().add(new THREE.EllipseCurve(0,0,RING_R,RING_R,0,Math.PI*2)),
+  360, EH_R*0.06, 24, true
+);
+const ringMat = new THREE.ShaderMaterial({
+  vertexColors:true, side:THREE.DoubleSide, transparent:true,
+  blending:THREE.AdditiveBlending,
+  uniforms:{},
+  vertexShader:`varying float vLat;
+    void main(){
+      vec3 p = position;
+      vLat = abs(normal.y);                // широта 0..1
+      gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);}`,
+  fragmentShader:`varying float vLat;
+    void main(){
+      vec3 hot = vec3(1.3,0.7,0.2);
+      vec3 cold= vec3(0.9,0.4,0.05);
+      vec3 col = mix(hot,cold,vLat);
+      float a = 0.9;
+      gl_FragColor = vec4(col,a);
+  }`
+});
+group.add(new THREE.Mesh(ringGeo, ringMat));
 
-  /* ======================================================
-        3)  ACCRETION DISK  (частицы + «линзованный» слой)
-     ====================================================== */
-  const pos = new Float32Array(DISK_PTS*3);
-  const col = new Float32Array(DISK_PTS*3);
-  const size= new Float32Array(DISK_PTS);
-  const tmpC= new THREE.Color();
-  for(let i=0;i<DISK_PTS;i++){
-    /* радиус с bias к центру */
-    const r = THREE.MathUtils.lerp(DISK_IN, DISK_OUT, Math.pow(Math.random(),1.4));
-    const a = Math.random()*Math.PI*2;
-    const x = Math.cos(a)*r;
-    const z = Math.sin(a)*r;
-    /* половину точек «загибаем» наверх (линза) */
-    const y = (i%2===0)
-              ?  (Math.random()*EH_RADIUS*1.4)     // над плоскостью
-              : -(Math.random()*EH_RADIUS*1.4);    // под плоскостью
-    pos.set([x,y,z], i*3);
-
-    tmpC.setHSL(0.05+0.05*Math.random(), 1.0, 0.55+0.15*Math.random());
-    col.set([tmpC.r,tmpC.g,tmpC.b], i*3);
-    size[i] = 3 + 2.0*Math.random();
+/* ── helper: полярная сетка диска ── */
+function buildCurvedDisk(inner, outer, segR=180, segT=220){
+  const geo = new THREE.BufferGeometry();
+  const verts=[], uvs=[], idx=[];
+  for(let r=0;r<=segR;r++){
+    const tr = r/segR;
+    const rad = THREE.MathUtils.lerp(inner,outer, tr);
+    const yOffset = Math.sin((rad-inner)/(outer-inner))*CURVE;
+    for(let t=0;t<=segT;t++){
+      const a = t/segT*Math.PI*2;
+      const x = Math.cos(a)*rad;
+      const z = Math.sin(a)*rad;
+      const y = (t%2===0?1:-1)*yOffset;          // вверх и «загиб» вниз
+      verts.push(x,y,z);
+      uvs.push(tr, t/segT);
+    }
   }
-  const diskGeo = new THREE.BufferGeometry();
-  diskGeo.setAttribute('position', new THREE.BufferAttribute(pos,3));
-  diskGeo.setAttribute('vcolor',   new THREE.BufferAttribute(col,3));
-  diskGeo.setAttribute('size',     new THREE.BufferAttribute(size,1));
-
-  /* — общий верт/фраг шейдер для диска — */
-  const VERT = `
-     attribute float size; attribute vec3 vcolor;
-     uniform float time; varying vec3 vc;
-     void main(){
-       vc = vcolor;
-       vec4 mv = modelViewMatrix * vec4(position,1.0);
-       float flick = 0.9 + 0.1*sin(time*2.5 + position.x*0.002);
-       gl_PointSize = size * flick * (420.0 / -mv.z);
-       gl_Position  = projectionMatrix * mv;
-     }`;
-  const FRAG = `
-     precision mediump float; varying vec3 vc;
-     void main(){
-       vec2 p = gl_PointCoord - 0.5;
-       float a = smoothstep(0.5,0.0,length(p));
-       gl_FragColor = vec4(vc*a, a);
-     }`;
-  const diskMat = new THREE.ShaderMaterial({
-    uniforms:{time:{value:0}},
-    vertexShader:VERT, fragmentShader:FRAG,
-    transparent:true, depthWrite:false,
-    blending:THREE.AdditiveBlending
-  });
-  const disk = new THREE.Points(diskGeo, diskMat);
-  disk.rotation.x = Math.PI/2 * 0.8;   // наклонён, как в интерстелларе
-  group.add(disk);
-
-  /* ======================================================
-        4)  GRAV. LENS  (shader-sphere с искажением фона)
-     ====================================================== */
-  const lensGeo = new THREE.SphereGeometry(EH_RADIUS*5, 64, 64);
-  const lensMat = new THREE.ShaderMaterial({
-    uniforms:{
-      strength:{value:0.35},      // радиальная деформация
-      glow    :{value:0.7}
-    },
-    vertexShader:`
-      varying vec3 vPos;
-      void main(){
-        vPos = normalize(position);
-        gl_Position = projectionMatrix *
-                      modelViewMatrix  *
-                      vec4(position,1.0);
-      }`,
-    fragmentShader:`
-      uniform float strength;
-      uniform float glow;
-      varying vec3 vPos;
-      void main(){
-        float len = length(vPos.xy);
-        float k   = pow(len, 2.0) * strength;
-        /* радужный fringe */
-        vec3 col  = mix(vec3(1.0), vec3(0.8,0.9,1.2), k);
-        gl_FragColor = vec4(col, smoothstep(1.0, 0.2, len)*glow*k);
-      }`,
-    transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
-    side:THREE.BackSide
-  });
-  const lensSphere = new THREE.Mesh(lensGeo, lensMat);
-  group.add(lensSphere);
-
-  /* ======================================================
-        5)  АНИМАЦИЯ
-     ====================================================== */
-  group.userData.anim = (dt)=>{
-    const t = performance.now()*0.001;
-    disk.rotation.z  -= 0.0015;         // диск быстро
-    ring.rotation.y  += 0.0006;         // photon-ring медленно
-    diskMat.uniforms.time.value = t;
-  };
-
-  focusCameraOn(group, 4);
+  for(let r=0;r<segR;r++){
+    for(let t=0;t<segT;t++){
+      const a = r*(segT+1)+t;
+      const b = a+segT+1;
+      idx.push(a,a+1,b+1, a,b+1,b);
+    }
+  }
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts,3));
+  geo.setAttribute('uv',       new THREE.Float32BufferAttribute(uvs,2));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  return geo;
 }
 
-/* =========================================================
-      helpers (добавьте один раз, если ещё нет)
-   ========================================================= */
-function createRingTexture(inner, outer){
-  const sz=256, cv=document.createElement('canvas');
-  cv.width=cv.height=sz; const ctx=cv.getContext('2d');
-  const g=ctx.createRadialGradient(sz/2,sz/2,sz*0.25,
-                                   sz/2,sz/2,sz*0.5);
-  g.addColorStop(0, inner);
-  g.addColorStop(1, outer);
-  ctx.fillStyle=g; ctx.fillRect(0,0,sz,sz);
+/* ── 3. Accretion disk (doppler shader) ── */
+const diskGeo = buildCurvedDisk(DISK_IN, DISK_OUT);
+const diskMat = new THREE.ShaderMaterial({
+  transparent:true, depthWrite:false, side:THREE.DoubleSide,
+  blending:THREE.AdditiveBlending,
+  uniforms:{
+    time:{value:0.0},
+    tex:{value:createNoiseTexture()},
+    rInner:{value:DISK_IN},
+    rOuter:{value:DISK_OUT}
+  },
+  vertexShader:`varying vec2 vUv;
+    void main(){
+      vUv = uv;
+      gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);
+    }`,
+  fragmentShader:`uniform float time; uniform sampler2D tex;
+    uniform float rInner; uniform float rOuter;
+    varying vec2 vUv; #define PI 3.1415926
+    void main(){
+      float r = mix(rInner,rOuter,vUv.x);
+      float theta = vUv.y*2.0*PI;
+      /* доплер: cos(theta) -> shift */
+      float dop = clamp(1.0+0.4*cos(theta),0.6,1.4);
+      vec3 base = mix(vec3(1.2,0.65,0.15), vec3(1.4,0.85,0.3), vUv.x);
+      float n = texture2D(tex, vec2(theta/PI+time*0.02, r*0.0004)).r;
+      vec3 col = base*dop*n;
+      float a = smoothstep(rOuter,rInner,r);
+      gl_FragColor=vec4(col,a*0.9);
+    }`
+});
+const disk = new THREE.Mesh(diskGeo, diskMat);
+disk.rotation.x = Math.PI/2;
+disk.rotation.z = 0.38;
+group.add(disk);
+
+/* ── 4. Линзованный задний дубликат ── */
+const diskBack = disk.clone();
+diskBack.material = diskMat.clone();
+diskBack.scale.y = -1;
+group.add(diskBack);
+
+/* ── 5. Динамическая «радуга» грав-линзы ── */
+const lens = new THREE.Sprite(new THREE.SpriteMaterial({
+  map:createRingTexture('#ffffff','#00000000'),
+  color:0xffffff, opacity:0.4, blending:THREE.AdditiveBlending,
+  depthWrite:false, depthTest:false
+}));
+lens.scale.set(EH_R*12.5, EH_R*12.5, 1);
+group.add(lens);
+
+/* ── 6. Анимация ── */
+group.userData.anim = (dt)=>{
+  const t=performance.now()*0.001;
+  disk.rotation.y -= 0.002; diskBack.rotation.y=disk.rotation.y;
+  ring.rotation.z += 0.0006;
+  diskMat.uniforms.time.value=t;
+  lens.material.rotation += 0.0005;
+};
+
+focusCameraOn(group,3.3);
+}
+
+/* ===== helpers (если нет) ===== */
+function createNoiseTexture(){
+  const s=256,cv=document.createElement('canvas');
+  cv.width=cv.height=s;const ctx=cv.getContext('2d');
+  const id=ctx.createImageData(s,s);
+  for(let i=0;i<s*s;i++){
+    const v=Math.random()*255;
+    id.data.set([v,v,v,255],i*4);
+  }
+  ctx.putImageData(id,0,0);
+  const t=new THREE.CanvasTexture(cv); t.wrapS=t.wrapT=THREE.RepeatWrapping;
+  return t;
+}
+function createRingTexture(inner,outer){
+  const sz=256,cv=document.createElement('canvas');
+  cv.width=cv.height=sz;const ctx=cv.getContext('2d');
+  const g=ctx.createRadialGradient(sz/2,sz/2,sz*0.32,sz/2,sz/2,sz*0.5);
+  g.addColorStop(0,inner);g.addColorStop(1,outer);
+  ctx.fillStyle=g;ctx.fillRect(0,0,sz,sz);
   return new THREE.CanvasTexture(cv);
-}
-
-function focusCameraOn(object, padding=3){
-  const box=new THREE.Box3().setFromObject(object);
-  const size=box.getSize(new THREE.Vector3());
-  const center=box.getCenter(new THREE.Vector3());
-  const maxDim=Math.max(size.x,size.y,size.z);
-  const dist   =(maxDim/2)/Math.tan(camera.fov*Math.PI/360)*padding;
-  camera.position.set(center.x, center.y, center.z + dist);
-  camera.lookAt(center); orbitControls.target.copy(center); orbitControls.update();
 }
 
 /* --- 4D utils (обновлены) --------------------------------*/
