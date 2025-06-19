@@ -53,7 +53,7 @@ function init() {
 
   /* post-processing (Composer уже собрали) */
   composer = new THREE.EffectComposer(renderer);
-  composer.addPass(new THREE.RenderPass(scene,camera));
+  composer.addPass( new THREE.RenderPass(scene,camera) );
   const bloom = new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),1.6,.45,.83);
   composer.addPass(bloom);
 
@@ -64,12 +64,12 @@ function init() {
 
   /* Controls */
   orbitControls = new THREE.OrbitControls(camera, renderer.domElement);
-  orbitControls.enableDamping=true; orbitControls.dampingFactor=.03;
-  orbitControls.minPolarAngle = -60;             // свободный полный оборот
+  orbitControls.enableDamping=true; orbitControls.dampingFactor=.02;
+  orbitControls.minPolarAngle = 0;             // свободный полный оборот
   orbitControls.maxPolarAngle = Math.PI;
 
   flyControls = new THREE.FlyControls(camera, renderer.domElement);
-  flyControls.movementSpeed = 10;
+  flyControls.movementSpeed = 1;
   flyControls.rollSpeed = Math.PI/2;
   flyControls.dragToLook = true;
   flyControls.enabled = false;
@@ -82,6 +82,7 @@ function init() {
   document.getElementById('generateBtn3').addEventListener('click',()=>loadDimension(generateTesseract));
   document.getElementById('generateBtn4').addEventListener('click',()=>loadDimension(generatePulsar));
   document.getElementById('generateBtn5').addEventListener('click',()=>loadDimension(generateBlackHole));
+  document.getElementById('generateBtn6').addEventListener('click',()=>loadDimension(generateInfinityWeb));
   document.getElementById('clearBtn').addEventListener('click', clearDimension);
 
   addEventListener('resize', onResize);
@@ -450,6 +451,7 @@ function onKey(e){
     case 'Digit3': loadDimension(generateTesseract);break;
     case 'Digit4': loadDimension(generatePulsar);break;
     case 'Digit5': loadDimension(generateBlackHole); break;
+    case 'Digit6': loadDimension(generateInfinityWeb); break;
     case 'KeyR': if(e.shiftKey) resetCamera();break;
   }
 }
@@ -700,152 +702,96 @@ function createMagneticArc(offset){
   return line;
 }
 
-/* =========================================================
-   DIMENSION #5 – Black-Hole v5 (Relativity Edition)
-   ========================================================= */
+/****************************************************************
+  DIMENSION #5 –  Spiral Flower Nebula   (замена «Black Hole»)
+****************************************************************/
 function generateBlackHole(group){
+  /* ‑-- общие настройки ‑-- */
+  const BUNDLES        = 16;        // «лепестков»
+  const SPIRALS_IN_B   = 14;       // спиралей в каждом лепестке
+  const POINTS_PER_S   = 240;      // точек на одну кривую
+  const R_MAX          = 20000;    // дальний радиус
+  const RADIAL_EXP_K   = 0.22;     // экспоненциальный рост r=e^(kθ)
+  const WAVE_HEIGHT    = 1600;      // волна по Y
+  const CORE_GLOW_R    = 800;      // радиус центрального свечения
 
-/* ─────────  базовые константы  ───────── */
-const EH_R   = 1420;                // event-horizon
-const RING_R = EH_R*1.05;          // photon-ring
-const DISK_IN= EH_R*1.35;
-const DISK_OUT=EH_R*8.0;
-const CURVE  = EH_R*3.0;           // высота «загиба» диска
+  /* ---------- центральное свечение ---------- */
+  const core = new THREE.Sprite(new THREE.SpriteMaterial({
+    map : makeGlowTexture('#70c8ff', '#00112200'),
+    color: 0xffffff,
+    blending: THREE.AdditiveBlending,
+    transparent: true,
+    opacity: 0.6,
+    depthWrite: false, depthTest: false
+  }));
+  core.scale.set(CORE_GLOW_R*2, CORE_GLOW_R*2, 1);
+  group.add(core);
 
-/* ── 1. Event horizon + Fresnel-glow ── */
-const horizonGeo = new THREE.SphereGeometry(EH_R,64,64);
-const horizonMat = new THREE.ShaderMaterial({
-  uniforms:{},
-  vertexShader:`varying vec3 vN; void main(){
-      vN = normalize(normalMatrix * normal);
-      gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.);
-  }`,
-  fragmentShader:`varying vec3 vN;
-      void main(){
-        float f = pow(1.0-abs(vN.z), 3.0);   // Fresnel
-        gl_FragColor = vec4(vec3(f*0.25), 1.0); // тонкое серое свечение
-  }`,
-  blending:THREE.AdditiveBlending, depthWrite:true
-});
-group.add(new THREE.Mesh(horizonGeo,horizonMat));
+  /* ---------- подготовка материалов ---------- */
+  const mat = new THREE.LineBasicMaterial({
+    transparent: true,
+    opacity: 0.5,
+    blending: THREE.AdditiveBlending,
+    vertexColors: true
+  });
 
-/* ── 2. Photon ring (tube + shader) ── */
-const ringGeo = new THREE.TubeGeometry(
-  new THREE.CurvePath().add(new THREE.EllipseCurve(0,0,RING_R,RING_R,0,Math.PI*2)),
-  360, EH_R*0.06, 24, true
-);
-const ringMat = new THREE.ShaderMaterial({
-  vertexColors:true, side:THREE.DoubleSide, transparent:true,
-  blending:THREE.AdditiveBlending,
-  uniforms:{},
-  vertexShader:`varying float vLat;
-    void main(){
-      vec3 p = position;
-      vLat = abs(normal.y);                // широта 0..1
-      gl_Position=projectionMatrix*modelViewMatrix*vec4(p,1.);}`,
-  fragmentShader:`varying float vLat;
-    void main(){
-      vec3 hot = vec3(1.3,0.7,0.2);
-      vec3 cold= vec3(0.9,0.4,0.05);
-      vec3 col = mix(hot,cold,vLat);
-      float a = 0.9;
-      gl_FragColor = vec4(col,a);
-  }`
-});
-group.add(new THREE.Mesh(ringGeo, ringMat));
+  /* ---------- генерация спиралей ---------- */
+  const posArr = [], colArr = [];
+  const tmpCol = new THREE.Color();
 
-/* ── helper: полярная сетка диска ── */
-function buildCurvedDisk(inner, outer, segR=180, segT=220){
+  for (let b=0; b<BUNDLES; b++){
+    const bundleAngle = (b / BUNDLES) * Math.PI * 2;
+
+    for (let s=0; s<SPIRALS_IN_B; s++){
+      const phase   = (s / SPIRALS_IN_B) * Math.PI * 2;
+      const twist   = (0.6 + 0.4*Math.random()) * (Math.random()<0.5?-1:1);
+      const hueBase = 0.55 + 0.1*Math.random();  // от голубого к розовому
+
+      for (let i=0; i<POINTS_PER_S; i++){
+        const t   = i / POINTS_PER_S;            // 0..1
+        const θ   = t * Math.PI * 10 + phase;    // ~5 оборотов
+        const r   = Math.exp(RADIAL_EXP_K * θ) * (R_MAX/Math.exp(RADIAL_EXP_K* Math.PI*10));
+        const x   =  Math.cos(θ+bundleAngle) * r;
+        const z   =  Math.sin(θ+bundleAngle) * r;
+        const y   =  Math.sin(θ*twist) * WAVE_HEIGHT * (1-t);
+
+        posArr.push(x, y, z);
+
+        tmpCol.setHSL(hueBase + 0.2*t, 1.0, 0.55 + 0.15*(1-t));
+        colArr.push(tmpCol.r, tmpCol.g, tmpCol.b);
+      }
+    }
+  }
+
   const geo = new THREE.BufferGeometry();
-  const verts=[], uvs=[], idx=[];
-  for(let r=0;r<=segR;r++){
-    const tr = r/segR;
-    const rad = THREE.MathUtils.lerp(inner,outer, tr);
-    const yOffset = Math.sin((rad-inner)/(outer-inner))*CURVE;
-    for(let t=0;t<=segT;t++){
-      const a = t/segT*Math.PI*2;
-      const x = Math.cos(a)*rad;
-      const z = Math.sin(a)*rad;
-      const y = (t%2===0?1:-1)*yOffset;          // вверх и «загиб» вниз
-      verts.push(x,y,z);
-      uvs.push(tr, t/segT);
-    }
-  }
-  for(let r=0;r<segR;r++){
-    for(let t=0;t<segT;t++){
-      const a = r*(segT+1)+t;
-      const b = a+segT+1;
-      idx.push(a,a+1,b+1, a,b+1,b);
-    }
-  }
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts,3));
-  geo.setAttribute('uv',       new THREE.Float32BufferAttribute(uvs,2));
-  geo.setIndex(idx);
-  geo.computeVertexNormals();
-  return geo;
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(posArr, 3));
+  geo.setAttribute('color',    new THREE.Float32BufferAttribute(colArr, 3));
+  geo.setDrawRange(0, posArr.length / 3);
+
+  const lines = new THREE.LineSegments(geo, mat);
+  group.add(lines);
+
+  /* ---------- анимация ---------- */
+  group.userData.anim = ()=>{
+    group.rotation.y += 0.0005;     // общий медленный разворот
+    lines.rotation.y += 0.0015;     // собственное «скручивание» нитей
+    lines.rotation.z += 0.0008;
+    const t = performance.now()*0.0004;
+    core.material.rotation = t;     // ядро слегка «сверкает»
+  };
+
+  /* ---------- авто-кадр ---------- */
+  focusCameraOn(group, 3.5);
 }
 
-/* ── 3. Accretion disk (doppler shader) ── */
-const diskGeo = buildCurvedDisk(DISK_IN, DISK_OUT);
-const diskMat = new THREE.ShaderMaterial({
-  transparent:true, depthWrite:false, side:THREE.DoubleSide,
-  blending:THREE.AdditiveBlending,
-  uniforms:{
-    time:{value:0.0},
-    tex:{value:createNoiseTexture()},
-    rInner:{value:DISK_IN},
-    rOuter:{value:DISK_OUT}
-  },
-  vertexShader:`varying vec2 vUv;
-    void main(){
-      vUv = uv;
-      gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);
-    }`,
-  fragmentShader:`uniform float time; uniform sampler2D tex;
-    uniform float rInner; uniform float rOuter;
-    varying vec2 vUv; #define PI 3.1415926
-    void main(){
-      float r = mix(rInner,rOuter,vUv.x);
-      float theta = vUv.y*2.0*PI;
-      /* доплер: cos(theta) -> shift */
-      float dop = clamp(1.0+0.4*cos(theta),0.6,1.4);
-      vec3 base = mix(vec3(1.2,0.65,0.15), vec3(1.4,0.85,0.3), vUv.x);
-      float n = texture2D(tex, vec2(theta/PI+time*0.02, r*0.0004)).r;
-      vec3 col = base*dop*n;
-      float a = smoothstep(rOuter,rInner,r);
-      gl_FragColor=vec4(col,a*0.9);
-    }`
-});
-const disk = new THREE.Mesh(diskGeo, diskMat);
-disk.rotation.x = Math.PI/2;
-disk.rotation.z = 0.38;
-group.add(disk);
-
-/* ── 4. Линзованный задний дубликат ── */
-const diskBack = disk.clone();
-diskBack.material = diskMat.clone();
-diskBack.scale.y = -1;
-group.add(diskBack);
-
-/* ── 5. Динамическая «радуга» грав-линзы ── */
-const lens = new THREE.Sprite(new THREE.SpriteMaterial({
-  map:createRingTexture('#ffffff','#00000000'),
-  color:0xffffff, opacity:0.4, blending:THREE.AdditiveBlending,
-  depthWrite:false, depthTest:false
-}));
-lens.scale.set(EH_R*12.5, EH_R*12.5, 1);
-group.add(lens);
-
-/* ── 6. Анимация ── */
-group.userData.anim = (dt)=>{
-  const t=performance.now()*0.001;
-  disk.rotation.y -= 0.002; diskBack.rotation.y=disk.rotation.y;
-  ring.rotation.z += 0.0006;
-  diskMat.uniforms.time.value=t;
-  lens.material.rotation += 0.0005;
-};
-
-focusCameraOn(group,3.3);
+/* ===== helper: мягкий спрайт-glow ===== */
+function makeGlowTexture(inner, outer){
+  const s=256, cv=document.createElement('canvas');
+  cv.width=cv.height=s; const ctx=cv.getContext('2d');
+  const g=ctx.createRadialGradient(s/2,s/2,1, s/2,s/2,s/2);
+  g.addColorStop(0,inner); g.addColorStop(1,outer);
+  ctx.fillStyle=g; ctx.fillRect(0,0,s,s);
+  return new THREE.CanvasTexture(cv);
 }
 
 /* ===== helpers (если нет) ===== */
@@ -867,6 +813,107 @@ function createRingTexture(inner,outer){
   const g=ctx.createRadialGradient(sz/2,sz/2,sz*0.32,sz/2,sz/2,sz*0.5);
   g.addColorStop(0,inner);g.addColorStop(1,outer);
   ctx.fillStyle=g;ctx.fillRect(0,0,sz,sz);
+  return new THREE.CanvasTexture(cv);
+}
+/*****************************************************************
+  DIMENSION #6 – Infinity Web  (random Lissajous + figure-8 flows)
+*****************************************************************/
+function generateInfinityWeb(group){
+
+  /* базовые настройки */
+  const CURVES        = 10;          // сколько кривых
+  const PTS_PER_CURVE = 300;         // плотность точек
+  const BASE_RADIUS   = 65000;        // «размах» паутины
+  const AMP_Y         = 12000;        // амплитуда колебаний по Y
+  const GLOW_R        = 1000;        // центральное свечение
+
+  const pos = [];  const col = [];
+  const tmpC = new THREE.Color();
+
+  for (let n = 0; n < CURVES; n++) {
+
+    /* случайно решаем: восьмёрка  (lemniscate) или лиссажу-нить */
+    const is8   = Math.random() < .45;
+
+    /* произвольные частоты и фазовый сдвиг */
+    const ax = 1 + Math.floor(Math.random() * 3);   // 1…3
+    const ay = is8 ? ax * 2 : 1 + Math.floor(Math.random() * 3);
+    const phi= Math.random() * Math.PI * 2;
+
+    /* индивидуальный градиент = hue по номеру кривой */
+    const hue0 = (n / CURVES + 0.55) % 1;
+    const hue1 = (hue0 + 0.15) % 1;
+
+    for (let i = 0; i < PTS_PER_CURVE; i++) {
+      const t  = i / (PTS_PER_CURVE-1);             // 0…1
+      const th = t * Math.PI * 2;
+
+      /* координаты */
+      let x, z;
+      if (is8) {
+        /* Фигура Бернулли (восьмёрка): r = a * sin(2θ) */
+        const r = BASE_RADIUS * Math.sin(2*th);
+        x = r * Math.cos(th);
+        z = r * Math.sin(th);
+      } else {
+        /* Кривая Лиссажу */
+        x = BASE_RADIUS * Math.sin(ax * th + phi);
+        z = BASE_RADIUS * Math.sin(ay * th);
+      }
+      const y = Math.sin(th * 3 + phi) * AMP_Y * (0.3 + 0.7*t);
+
+      pos.push(x, y, z);
+
+      /* плавный градиент внутри одной кривой */
+      tmpC.setHSL(THREE.MathUtils.lerp(hue0, hue1, t), 1, 0.55 + .15*(1-t));
+      col.push(tmpC.r, tmpC.g, tmpC.b);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
+  geo.setAttribute('color',    new THREE.BufferAttribute(new Float32Array(col),3));
+
+  const mat = new THREE.LineBasicMaterial({
+    vertexColors:true,
+    transparent:true,
+    blending:THREE.AdditiveBlending,
+    opacity:0.9
+  });
+
+  const lines = new THREE.LineSegments(geo, mat);
+  group.add(lines);
+
+  /* центральный glow-спрайт */
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map:makeGlowTexture('#8ad6ff','#00102000'),
+    blending:THREE.AdditiveBlending,
+    transparent:true,
+    opacity:.4, depthWrite:false, depthTest:false
+  }));
+  glow.scale.set(GLOW_R*2, GLOW_R*2, 1);
+  group.add(glow);
+
+  /* анимация: лёгкая скрутка + пульс свечения */
+  group.userData.anim = ()=>{
+    const t = performance.now()*0.001;
+    lines.rotation.y += 0.0009;
+    lines.rotation.z += 0.0004;
+    glow.material.rotation = t*0.3;
+    const o = .3 + .1*Math.sin(t*2);
+    glow.material.opacity = o;
+  };
+
+  focusCameraOn(group,3.0);
+}
+
+/* === один раз добавьте, если ещё нет (использовался в ядре) === */
+function makeGlowTexture(inner, outer){
+  const s=256,cv=document.createElement('canvas');
+  cv.width=cv.height=s;const ctx=cv.getContext('2d');
+  const g=ctx.createRadialGradient(s/2,s/2,2, s/2,s/2,s/2);
+  g.addColorStop(0,inner); g.addColorStop(1,outer);
+  ctx.fillStyle=g; ctx.fillRect(0,0,s,s);
   return new THREE.CanvasTexture(cv);
 }
 
