@@ -87,6 +87,48 @@ function init() {
 
   addEventListener('resize', onResize);
   addEventListener('keydown', onKey);
+
+      /* === MUSIC  ===================================================== */
+    const audioEl = document.getElementById('bgMusic');
+    audioEl.volume = 0.7;        // стартовая громкость
+
+    /* нужен контекст, чтобы WebAudio видел элемент */
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const track    = audioCtx.createMediaElementSource(audioEl);
+    const gainNode = audioCtx.createGain();
+    track.connect(gainNode).connect(audioCtx.destination);
+
+    /* play / pause кнопка  ------------------------------------------ */
+    const musicBtn = document.createElement('button');
+    musicBtn.id    = 'musicBtn';
+    musicBtn.textContent = '♪';
+    musicBtn.style.cssText =
+      'position:fixed;top:20px;right:20px;z-index:20;padding:8px 14px;' +
+      'border:0;border-radius:8px;background:rgba(255,255,255,.15);' +
+      'color:#fff;font-size:20px;cursor:pointer;backdrop-filter:blur(6px);';
+    document.body.appendChild(musicBtn);
+
+    let musicPlaying = false;
+    musicBtn.onclick = async () =>{
+      if(!musicPlaying){
+        await audioCtx.resume();   // Chrome: нужно после user-gesture
+        audioEl.play();
+        musicBtn.textContent = '❚❚';  // pause icon
+        musicPlaying = true;
+      }else{
+        audioEl.pause();
+        musicBtn.textContent = '♪';
+        musicPlaying = false;
+      }
+    };
+
+    /* колёсиком на кнопке — громкость -------------------------------- */
+    musicBtn.addEventListener('wheel', e=>{
+      e.preventDefault();
+      const v = THREE.MathUtils.clamp(audioEl.volume - e.deltaY*0.001, 0, 1);
+      audioEl.volume = v;
+      gainNode.gain.value = v;              // синхронизируем
+    });
 }
 
 /* ---------- STARS ---------- (как прежде, число/радиус ↑) */
@@ -146,7 +188,7 @@ function generateRingOfChaos(targetGroup) {
   const NUM_CLUSTERS        = 18;            // «островов»
   const OBJECTS_PER_CLUSTER = 400;
   const RING_RADIUS         = 6500;
-  const CLUSTER_SPREAD      = 11100;
+  const CLUSTER_SPREAD      = 15100;
 
   const baseGeometries = [
     new THREE.BoxGeometry(1, 1, 1),
@@ -234,9 +276,9 @@ function generateRingOfChaos(targetGroup) {
 //////////////////////////////////////////////////////////////
 function generateStellarVortex(group){
   /* ─────  Глобальные параметры  ───── */
-  const GAL_ARMS   = 5;         // больших рукавов
+  const GAL_ARMS   = 6;         // больших рукавов
   const PTS_ARM    = 60000;
-  const CORE_SPIR  = 5;         // мини-спиралей-“электронов”
+  const CORE_SPIR  = 15;         // мини-спиралей-“электронов”
   const CORE_PTS   = 1200;      // точек на каждую мини-спираль
   const SCALE_GAL  = 1600;
   const SCALE_CORE = 420;
@@ -257,7 +299,7 @@ function generateStellarVortex(group){
   for(let arm=0; arm<GAL_ARMS; arm++){
     for(let i=0; i<PTS_ARM; i++, idx++){
       const t  = i / PTS_ARM;
-      const θ  = t*Math.PI*16 + arm*Math.PI;   // 8 оборотов
+      const θ  = t*Math.PI*10 + arm*Math.PI;   // 8 оборотов
       const r  = A*Math.exp(B*θ);
 
       let x = r*Math.cos(θ)*SCALE_GAL;
@@ -302,7 +344,7 @@ function generateStellarVortex(group){
       c.setHSL((s/CORE_SPIR)+0.05*Math.sin(t*6), 0.85, 0.65);
       col.set([c.r,c.g,c.b], idx*3);
 
-      size[idx] = 6 + 9*(1-t)          // ближе к центру крупнее
+      size[idx] = 6 + 8*(1-t)          // ближе к центру крупнее
                   + 2*Math.random();
     }
   }
@@ -703,86 +745,128 @@ function createMagneticArc(offset){
 }
 
 /****************************************************************
-  DIMENSION #5 –  Spiral Flower Nebula   (замена «Black Hole»)
+  DIMENSION #5 – Spiral Flower Nebula v7
+           • 4-D breath       • Mouse highlight
 ****************************************************************/
 function generateBlackHole(group){
-  /* ‑-- общие настройки ‑-- */
-  const BUNDLES        = 16;        // «лепестков»
-  const SPIRALS_IN_B   = 14;       // спиралей в каждом лепестке
-  const POINTS_PER_S   = 240;      // точек на одну кривую
-  const R_MAX          = 20000;    // дальний радиус
-  const RADIAL_EXP_K   = 0.22;     // экспоненциальный рост r=e^(kθ)
-  const WAVE_HEIGHT    = 1600;      // волна по Y
-  const CORE_GLOW_R    = 800;      // радиус центрального свечения
 
-  /* ---------- центральное свечение ---------- */
+  /* ====  параметры  ==== */
+  const BUNDLES        = 16;
+  const SPIRALS_IN_B   = 14;
+  const PTS_PER_S      = 2600;
+  const R_MAX          = 80000;
+  const RADIAL_K       = 0.22;
+  const WAVE_H         = 9600;
+  const CORE_GLOW_R    = 900;
+
+  /* ---------- центральный glow ---------- */
   const core = new THREE.Sprite(new THREE.SpriteMaterial({
-    map : makeGlowTexture('#70c8ff', '#00112200'),
-    color: 0xffffff,
+    map: makeGlowTexture('#73d0ff','#00102000'),
     blending: THREE.AdditiveBlending,
-    transparent: true,
-    opacity: 0.6,
-    depthWrite: false, depthTest: false
+    transparent: true, opacity: 0.6, depthWrite:false, depthTest:false
   }));
-  core.scale.set(CORE_GLOW_R*2, CORE_GLOW_R*2, 1);
+  core.scale.setScalar(CORE_GLOW_R*2);
   group.add(core);
 
-  /* ---------- подготовка материалов ---------- */
-  const mat = new THREE.LineBasicMaterial({
-    transparent: true,
-    opacity: 0.2,
-    blending: THREE.AdditiveBlending,
-    vertexColors: true
-  });
+  /* ---------- буферы ---------- */
+  const TOTAL = BUNDLES * SPIRALS_IN_B * PTS_PER_S;
+  const pos   = new Float32Array(TOTAL*3);
+  const col   = new Float32Array(TOTAL*3);
+  const size  = new Float32Array(TOTAL);
+  const tmpC  = new THREE.Color();
 
-  /* ---------- генерация спиралей ---------- */
-  const posArr = [], colArr = [];
-  const tmpCol = new THREE.Color();
+  let ptr = 0;
 
-  for (let b=0; b<BUNDLES; b++){
-    const bundleAngle = (b / BUNDLES) * Math.PI * 2;
+  for(let b=0;b<BUNDLES;b++){
+    const bundleAng = b/BUNDLES * Math.PI*2;
 
-    for (let s=0; s<SPIRALS_IN_B; s++){
-      const phase   = (s / SPIRALS_IN_B) * Math.PI * 2;
-      const twist   = (0.6 + 0.4*Math.random()) * (Math.random()<0.5?-1:1);
-      const hueBase = 0.55 + 0.1*Math.random();  // от голубого к розовому
+    for(let s=0;s<SPIRALS_IN_B;s++){
+      const phase   = s/SPIRALS_IN_B * Math.PI*2;
+      const twist   = (0.6+0.4*Math.random()) * (Math.random()<.5?-1:1);
+      const hueBase = 0.55 + 0.1*Math.random();
 
-      for (let i=0; i<POINTS_PER_S; i++){
-        const t   = i / POINTS_PER_S;            // 0..1
-        const θ   = t * Math.PI * 10 + phase;    // ~5 оборотов
-        const r   = Math.exp(RADIAL_EXP_K * θ) * (R_MAX/Math.exp(RADIAL_EXP_K* Math.PI*10));
-        const x   =  Math.cos(θ+bundleAngle) * r;
-        const z   =  Math.sin(θ+bundleAngle) * r;
-        const y   =  Math.sin(θ*twist) * WAVE_HEIGHT * (1-t);
+      for(let i=0;i<PTS_PER_S;i++){
+        const t  = i/(PTS_PER_S-1);
+        const θ  = t*Math.PI*10 + phase;
+        const r3 = Math.exp(RADIAL_K*θ);
+        const r  = r3 * (R_MAX/Math.exp(RADIAL_K*Math.PI*10));
 
-        posArr.push(x, y, z);
+        /* ---- 4-D координата w и персп. проекция ---- */
+        const w   = Math.sin(θ*1.7) * R_MAX*0.22;
+        const proj= 1.0/(1.0 + w/(R_MAX*0.22));   // 4D→3D
 
-        tmpCol.setHSL(hueBase + 0.2*t, 1.0, 0.55 + 0.15*(1-t));
-        colArr.push(tmpCol.r, tmpCol.g, tmpCol.b);
+        const x = Math.cos(θ+bundleAng)*r*proj;
+        const z = Math.sin(θ+bundleAng)*r*proj;
+        const y = Math.sin(θ*twist)*WAVE_H*(1-t);
+
+        pos[ptr*3  ] = x;
+        pos[ptr*3+1] = y;
+        pos[ptr*3+2] = z;
+
+        /* динамический hue-shift во времени (обновляем в анимации) */
+        tmpC.setHSL(hueBase + 0.2*t , 1 , 0.55+0.15*(1-t));
+        col.set([tmpC.r,tmpC.g,tmpC.b], ptr*3);
+
+        size[ptr] = 10 + 8*(1-t);
+        ptr++;
       }
     }
   }
 
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(posArr, 3));
-  geo.setAttribute('color',    new THREE.Float32BufferAttribute(colArr, 3));
-  geo.setDrawRange(0, posArr.length / 3);
+  geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  geo.setAttribute('color',    new THREE.BufferAttribute(col,3));
+  geo.setAttribute('size',     new THREE.BufferAttribute(size,1));
 
-  const lines = new THREE.LineSegments(geo, mat);
-  group.add(lines);
+  const mat = makePointShader();        // уже есть в проекте
+  const cloud = new THREE.Points(geo, mat);
+  group.add(cloud);
+
+  /* ---------- индексы подсвеченных точек ---------- */
+  const highlight = new Set();                // store indices
+  const restoreAfter = 1000;                  // ms
 
   /* ---------- анимация ---------- */
   group.userData.anim = ()=>{
-    group.rotation.y += 0.0005;     // общий медленный разворот
-    lines.rotation.y += 0.0015;     // собственное «скручивание» нитей
-    lines.rotation.z += 0.0008;
-    const t = performance.now()*0.0004;
-    core.material.rotation = t;     // ядро слегка «сверкает»
+    const t = performance.now()*0.001;
+    const hueShift = (t*0.02)%1.0;
+    mat.uniforms.time.value = t;
+
+    /* вращения */
+    group.rotation.y += 0.00045;
+    cloud.rotation.y += 0.0013;
+    cloud.rotation.z += 0.0006;
+
+    /* прокручиваем цветовой сдвиг по HSL */
+    const colAttr = geo.attributes.color;
+    for(let i of highlight){ /* оставляем подсвеченные как есть */}
+    for(let i=0;i<colAttr.count;i+=20){       // sparse обновление
+      const h = ((col[i*3]+hueShift)%1);
+      tmpC.setHSL(h,1,0.5);
+      colAttr.setXYZ(i,tmpC.r,tmpC.g,tmpC.b);
+    }
+    colAttr.needsUpdate=true;
+    core.material.rotation = t*0.4;
   };
 
-  /* ---------- авто-кадр ---------- */
-  focusCameraOn(group, 3.5);
+  /* expose geometry for raycaster */
+  cloud.userData.type = 'nebulaCloud';
+  cloud.userData.highlightSet = highlight;
+
+  focusCameraOn(group,3.2);
 }
+
+/* =====  Mouse-raycaster  (вставить один раз после init) ===== */
+const ray = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+window.addEventListener('pointermove', e=>{
+  mouse.x = (e.clientX/innerWidth)*2-1;
+  mouse.y = -1 * (e.clientY/innerHeight)*2+1;
+});
+window.addEventListener('pointerdown', highlightPoint);
+
+
 
 /* ===== helper: мягкий спрайт-glow ===== */
 function makeGlowTexture(inner, outer){
@@ -815,98 +899,141 @@ function createRingTexture(inner,outer){
   ctx.fillStyle=g;ctx.fillRect(0,0,sz,sz);
   return new THREE.CanvasTexture(cv);
 }
-/*****************************************************************
-  DIMENSION #6 – Infinity Web  (random Lissajous + figure-8 flows)
-*****************************************************************/
+/****************************************************************
+  DIMENSION #6 – Infinity Web v2  (3-D figure-8 point clouds)
+****************************************************************/
 function generateInfinityWeb(group){
 
-  /* базовые настройки */
-  const CURVES        = 10;          // сколько кривых
-  const PTS_PER_CURVE = 300;         // плотность точек
-  const BASE_RADIUS   = 65000;        // «размах» паутины
-  const AMP_Y         = 12000;        // амплитуда колебаний по Y
-  const GLOW_R        = 1000;        // центральное свечение
+  /*  параметры  */
+  const CURVES        = 18;          // количество восьмёрок / Лиссажу
+  const PTS_PER_CURVE = 26000;         // точек на кривой
+  const BASE_R        = 17800;        // общий размах
+  const AMP_Y         = 9000;         // «волна» по Y
+  const SIZE_MIN      = 9, SIZE_MAX = 74;
+  const GLOW_R        = 900;
 
-  const pos = [];  const col = [];
+  /* ------------- генерация буферов ------------- */
+  const pos = new Float32Array(CURVES * PTS_PER_CURVE * 3);
+  const col = new Float32Array(CURVES * PTS_PER_CURVE * 3);
+  const siz = new Float32Array(CURVES * PTS_PER_CURVE);
   const tmpC = new THREE.Color();
+  let ptr = 0;
 
-  for (let n = 0; n < CURVES; n++) {
+  for (let n=0; n<CURVES; n++){
+    const is8 = Math.random() < 0.6;          // чаще восьмёрка
+    const ax  = 1 + Math.floor(Math.random()*3);
+    const ay  = is8 ? ax*2 : 1 + Math.floor(Math.random()*3);
+    const phi = Math.random()*Math.PI*2;
 
-    /* случайно решаем: восьмёрка  (lemniscate) или лиссажу-нить */
-    const is8   = Math.random() < .45;
+    /* случайный 3-D поворот всей кривой */
+    const quat = new THREE.Quaternion()
+       .setFromEuler(new THREE.Euler(
+         Math.random()*Math.PI,
+         Math.random()*Math.PI,
+         Math.random()*Math.PI
+       ));
 
-    /* произвольные частоты и фазовый сдвиг */
-    const ax = 1 + Math.floor(Math.random() * 3);   // 1…3
-    const ay = is8 ? ax * 2 : 1 + Math.floor(Math.random() * 3);
-    const phi= Math.random() * Math.PI * 2;
+    for (let i=0;i<PTS_PER_CURVE;i++){
+      const t = i/(PTS_PER_CURVE-1);
+      const θ = t*Math.PI*2;
+      let x,z;
 
-    /* индивидуальный градиент = hue по номеру кривой */
-    const hue0 = (n / CURVES + 0.55) % 1;
-    const hue1 = (hue0 + 0.15) % 1;
-
-    for (let i = 0; i < PTS_PER_CURVE; i++) {
-      const t  = i / (PTS_PER_CURVE-1);             // 0…1
-      const th = t * Math.PI * 2;
-
-      /* координаты */
-      let x, z;
-      if (is8) {
-        /* Фигура Бернулли (восьмёрка): r = a * sin(2θ) */
-        const r = BASE_RADIUS * Math.sin(2*th);
-        x = r * Math.cos(th);
-        z = r * Math.sin(th);
-      } else {
-        /* Кривая Лиссажу */
-        x = BASE_RADIUS * Math.sin(ax * th + phi);
-        z = BASE_RADIUS * Math.sin(ay * th);
+      if(is8){
+        const r = BASE_R*Math.sin(2*θ);
+        x = r*Math.cos(θ);
+        z = r*Math.sin(θ);
+      }else{
+        x = BASE_R*Math.sin(ax*θ+phi);
+        z = BASE_R*Math.sin(ay*θ);
       }
-      const y = Math.sin(th * 3 + phi) * AMP_Y * (0.3 + 0.7*t);
+      const y = Math.sin(θ*2+phi)*AMP_Y*(0.3+0.7*t);
 
-      pos.push(x, y, z);
+      /* применяем глобальный поворот */
+      const v = new THREE.Vector3(x,y,z).applyQuaternion(quat);
 
-      /* плавный градиент внутри одной кривой */
-      tmpC.setHSL(THREE.MathUtils.lerp(hue0, hue1, t), 1, 0.55 + .15*(1-t));
-      col.push(tmpC.r, tmpC.g, tmpC.b);
+      pos[ptr*3  ] = v.x;
+      pos[ptr*3+1] = v.y;
+      pos[ptr*3+2] = v.z;
+
+      /* фиолетово-розовый градиент по t */
+      tmpC.setHSL(0.78 - 0.05*t, 1.0, 0.55 + 0.15*(1-t));
+      col.set([tmpC.r,tmpC.g,tmpC.b], ptr*3);
+
+      siz[ptr] = THREE.MathUtils.lerp(SIZE_MIN,SIZE_MAX, 1-t);
+      ptr++;
     }
   }
 
+  /* ------------- geometry / material ------------- */
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
-  geo.setAttribute('color',    new THREE.BufferAttribute(new Float32Array(col),3));
+  geo.setAttribute('position', new THREE.BufferAttribute(pos,3));
+  geo.setAttribute('color',    new THREE.BufferAttribute(col,3));
+  geo.setAttribute('size',     new THREE.BufferAttribute(siz,1));
 
-  const mat = new THREE.LineBasicMaterial({
-    vertexColors:true,
-    transparent:true,
-    blending:THREE.AdditiveBlending,
-    opacity:0.9
-  });
+  const mat = makePointShader();
 
-  const lines = new THREE.LineSegments(geo, mat);
-  group.add(lines);
+  const cloud = new THREE.Points(geo, mat);
+  group.add(cloud);
 
-  /* центральный glow-спрайт */
+  /* ------------- central glow sprite ------------- */
   const glow = new THREE.Sprite(new THREE.SpriteMaterial({
-    map:makeGlowTexture('#8ad6ff','#00102000'),
+    map: makeGlowTexture('#d172ff','#10002000'),
     blending:THREE.AdditiveBlending,
-    transparent:true,
-    opacity:.4, depthWrite:false, depthTest:false
+    transparent:true, depthWrite:false, depthTest:false,
+    opacity:0.85
   }));
-  glow.scale.set(GLOW_R*2, GLOW_R*2, 1);
+  glow.scale.set(GLOW_R*2,GLOW_R*2,1);
   group.add(glow);
 
-  /* анимация: лёгкая скрутка + пульс свечения */
+  /* ------------- «лазерный» вихрь ------------- */
+  const cylGeo = new THREE.CylinderGeometry(40,40, BASE_R*2.3, 8,1,true);
+  const cylMat = new THREE.MeshBasicMaterial({
+    color:0xff66ff, transparent:true, opacity:0.55,
+    blending:THREE.AdditiveBlending, side:THREE.DoubleSide,
+    depthWrite:false
+  });
+
+
+  /* ------------- анимация ------------- */
   group.userData.anim = ()=>{
     const t = performance.now()*0.001;
-    lines.rotation.y += 0.0009;
-    lines.rotation.z += 0.0004;
-    glow.material.rotation = t*0.3;
-    const o = .3 + .1*Math.sin(t*2);
-    glow.material.opacity = o;
+    cloud.rotation.y += 0.0008;
+    cloud.rotation.z += 0.0003;
+    mat.uniforms.time.value = t;
   };
 
-  focusCameraOn(group,3.0);
+  focusCameraOn(group, 2.8);
 }
 
+/* ===== point-shader (общий, добавить один раз) ===== */
+function makePointShader(){
+  return new THREE.ShaderMaterial({
+    uniforms:{time:{value:0}},
+    vertexShader:`
+      attribute float size; attribute vec3 color;
+      varying vec3 vCol; varying float vAlpha;
+      uniform float time;
+      void main(){
+        vCol = color;
+        vec4 mv = modelViewMatrix * vec4(position,1.0);
+        float puls = 0.85 + 0.15*sin(time*0.8 + position.x*0.002);
+        vAlpha = puls;
+        gl_PointSize = size * (400.0 / -mv.z);
+        gl_Position  = projectionMatrix * mv;
+      }`,
+    fragmentShader:`
+      precision mediump float;
+      varying vec3  vCol; varying float vAlpha;
+      void main(){
+        vec2 uv = gl_PointCoord - 0.5;
+        float d  = length(uv);
+        float a  = smoothstep(0.45,0.0,d) * vAlpha * 2.6;
+        gl_FragColor = vec4(vCol*a, a);
+      }`,
+    transparent:true, depthWrite:false,
+    blending:THREE.AdditiveBlending
+  });
+}
 /* === один раз добавьте, если ещё нет (использовался в ядре) === */
 function makeGlowTexture(inner, outer){
   const s=256,cv=document.createElement('canvas');
@@ -961,3 +1088,4 @@ function mulberry32(a) {
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
   };
 }
+
