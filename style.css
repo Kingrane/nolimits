@@ -1,0 +1,38 @@
+/* минимал-dark + мягкое стекло */
+:root{
+  --accent:#00ffd5;
+  --bg-blur:rgba(30,30,30,.35);
+  --pill-radius:28px;
+  --font:'Inter','Segoe UI',Roboto,Arial,sans-serif;
+}
+*{box-sizing:border-box;user-select:none}
+html,body{height:100%;margin:0;background:#000;color:#fff;font-family:var(--font);}
+canvas{display:block;}
+
+#controls {
+  position:fixed;
+  bottom:22px; left:50%;
+  transform:translateX(-50%);
+  display:flex; align-items:center;
+  gap:12px; padding:10px 20px 10px 18px;
+  background:var(--bg-blur);
+  backdrop-filter:blur(8px);
+  border-radius:40px; z-index:10;
+}
+
+button{
+  all:unset;cursor:pointer;padding:10px 24px;
+  border-radius:var(--pill-radius);
+  background:linear-gradient(145deg,rgba(60,60,60,.65),rgba(25,25,25,.65));
+  color:#fff;font-size:.9rem;letter-spacing:1px;text-transform:uppercase;
+  transition:.25s;
+}
+button:hover{
+    border:2px solid var(--accent);
+    background:linear-gradient(145deg,rgba(90,90,90,.8),rgba(45,45,45,.8));
+}
+button:active{background:linear-gradient(145deg,rgba(35,35,35,.85),rgba(15,15,15,.85));transform:scale(.97);}
+#clearBtn{background:rgba(120,40,40,.6);}
+#clearBtn:hover{background:rgba(160,55,55,.75);}
+#clearBtn:active{background:rgba(90,30,30,.8);}
+.hiddenUI{opacity:0;pointer-events:none;}

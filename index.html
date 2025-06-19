@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>За Границами Измерений</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+
+    <!-- Интерфейс управления -->
+    <div id="controls">
+        <button id="generateBtn1">1</button>
+        <button id="generateBtn2">2</button>
+        <button id="generateBtn3">3</button>
+        <button id="generateBtn4">4</button>
+        <button id="generateBtn5">5</button>
+        <button id="clearBtn">Очистить</button>
+        <!-- Добавим кнопку для другого измерения позже -->
+        <!-- <button id="generateBtn2">Измерение [Название 2]</button> -->
+    </div>
+
+    <!-- 1. Core -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.131.3/build/three.min.js"></script>
+
+    <!-- 2. Base class для всех post-effect’ов -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.131.3/examples/js/postprocessing/Pass.js"></script>
+
+    <!-- 3. Шейдеры для Bloom -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.131.3/examples/js/shaders/CopyShader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.131.3/examples/js/shaders/LuminosityHighPassShader.js"></script>
+
+    <!-- 4. Пост-процессинг -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.131.3/examples/js/postprocessing/ShaderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.131.3/examples/js/postprocessing/EffectComposer.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.131.3/examples/js/postprocessing/RenderPass.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.131.3/examples/js/postprocessing/UnrealBloomPass.js"></script>
+
+    <!-- 5. Остальные helpers -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.131.3/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.131.3/examples/js/controls/FlyControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/simplex-noise@2.4.0/simplex-noise.js"></script>
+
+    <!-- 6. Ваш основной код -->
+    <script src="script.js"></script>
+
+
+</body>
+</html>
